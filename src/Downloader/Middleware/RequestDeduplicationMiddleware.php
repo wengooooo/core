@@ -39,6 +39,11 @@ final class RequestDeduplicationMiddleware implements RequestMiddlewareInterface
         $replaceFlags = HTTP_URL_REPLACE;
         $parts = \parse_url($uri);
 
+//        if($request->getMeta('retrying')) {
+//            $request->withMeta('retrying', false);
+//            return $request;
+//        }
+
         if ($this->option('ignore_url_fragments')) {
             $replaceFlags |= HTTP_URL_STRIP_FRAGMENT;
         }

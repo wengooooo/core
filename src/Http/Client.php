@@ -16,9 +16,11 @@ namespace RoachPHP\Http;
 use Generator;
 use GuzzleHttp\Client as GuzzleClient;
 use GuzzleHttp\Exception\BadResponseException;
+use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\Pool;
 use Psr\Http\Message\ResponseInterface;
+use RoachPHP\Exception\Exception;
 
 final class Client implements ClientInterface
 {
@@ -44,16 +46,25 @@ final class Client implements ClientInterface
                         ->sendAsync($request->getPsrRequest(), $request->getOptions())
                         ->then(
                             static fn (ResponseInterface $response) => new Response($response, $request),
+//                            static fn (GuzzleException $e) => throw new Exception(
+//                                $request,
+//                                null,
+//                                $e->getMessage(),
+//                                $e->getCode(),
+//                                $e
+//                            ),
                             static function (GuzzleException $reason) use ($request) {
+                                throw new Exception($request, $reason);
+
                                 // If we got back a response, we want to return a Response object
                                 // so it can get sent through the middleware stack.
-                                if ($reason instanceof BadResponseException) {
-                                    return new Response($reason->getResponse(), $request);
-                                }
-
-                                // For all other cases, we'll wrap the exception in our own
-                                // exception so it can be handled by any request exception middleware.
-                                throw new RequestException($request, $reason);
+//                                if ($reason instanceof BadResponseException) {
+//                                    return new Response($reason->getResponse(), $request);
+//                                }
+//
+//                                // For all other cases, we'll wrap the exception in our own
+//                                // exception so it can be handled by any request exception middleware.
+//                                throw new RequestException($request, $reason);
                             },
                         );
                 };

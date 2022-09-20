@@ -65,7 +65,7 @@ final class DefaultContainer implements ContainerInterface
         $this->container->addShared(EventDispatcher::class, EventDispatcher::class);
         $this->container->addShared(EventDispatcherInterface::class, EventDispatcher::class);
         $this->container->add(ClockInterface::class, SystemClock::class);
-        $this->container->add(
+        $this->container->addShared(
             RequestSchedulerInterface::class,
             /** @psalm-suppress MixedReturnStatement, MixedInferredReturnType */
             fn (): RequestSchedulerInterface => $this->container->get(ArrayRequestScheduler::class),
