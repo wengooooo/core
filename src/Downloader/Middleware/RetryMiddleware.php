@@ -8,6 +8,7 @@ use DateTime;
 use GuzzleHttp\Exception\BadResponseException;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Exception\TransferException;
 use GuzzleHttp\Promise\Promise;
 use JetBrains\PhpStorm\ArrayShape;
 use Psr\Http\Message\RequestInterface;
@@ -15,6 +16,7 @@ use Psr\Http\Message\ResponseInterface;
 use RoachPHP\Events\RequestDropped;
 use RoachPHP\Events\RequestScheduling;
 use RoachPHP\Exception\Exception;
+use RoachPHP\Events\Exception as ExceptionEvent;
 use RoachPHP\Http\Request;
 use RoachPHP\Http\Response;
 use RoachPHP\Scheduling\RequestSchedulerInterface;
@@ -55,6 +57,7 @@ class RetryMiddleware implements ExceptionMiddlewareInterface, RequestMiddleware
     public function handleResponse(Response $response): Response
     {
         if($this->option('on_retry_response_callback') && $this->option('on_retry_response_callback')($response) && $this->countRemainingRetries($response->getRequest()) > 0) {
+            $this->eventDispatcher->dispatch(new ExceptionEvent($response->getRequest(), new BadResponseException("detected verification code", $response->getRequest()->getPsrRequest(), $response->getResponse())), ExceptionEvent::NAME);
             $this->doRetry($response->getRequest(), $response);
         }
 
@@ -66,24 +69,23 @@ class RetryMiddleware implements ExceptionMiddlewareInterface, RequestMiddleware
 
         $reason = $exception->getGuzzleException();
         $request = $exception->getRequest();
-        var_dump($reason->getMessage());
-        var_dump($reason instanceof RequestException);
-        var_dump(get_class($reason));
 
         if ($reason instanceof BadResponseException) {
             $response = new Response($reason->getResponse(), $request);
 
             if ($this->shouldRetryHttpResponse($request, $response)) {
+                $this->eventDispatcher->dispatch(new ExceptionEvent($request, $reason), ExceptionEvent::NAME);
                 $this->doRetry($request, $response);
             }
             // If this was a connection exception, test to see if we should retry based on connect timeout rules
         } elseif ($reason instanceof ConnectException || $reason instanceof RequestException) {
             // If was another type of exception, test if we should retry based on timeout rules
-            var_dump($this->shouldRetryConnectException($request));
             if ($this->shouldRetryConnectException($request)) {
+                $this->eventDispatcher->dispatch(new ExceptionEvent($request, $reason), ExceptionEvent::NAME);
                 $this->doRetry($request);
             }
         }
+
         return $exception;
     }
 
@@ -199,8 +201,11 @@ class RetryMiddleware implements ExceptionMiddlewareInterface, RequestMiddleware
             ? (int) $this->option('max_retry_attempts')
             : $this->option('max_retry_attempts');
 
-        var_dump((int) max([$numAllowed - $retryCount, 0]));
-        return (int) max([$numAllowed - $retryCount, 0]);
+        $result = (int) max([$numAllowed - $retryCount, 0]);
+        if($result <= 0) {
+            $this->eventDispatcher->dispatch(new ExceptionEvent($request, new RequestException("Give Up", $request->getPsrRequest(), null)), ExceptionEvent::NAME);
+        }
+        return $result;
     }
 
     /**
